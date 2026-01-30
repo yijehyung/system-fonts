@@ -1,0 +1,17 @@
+[package]
+name = "system-fonts"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "System font discovery and locale-based font preset selection."
+readme = "README.md"
+repository = "https://github.com/yijehyung/system-fonts"
+homepage = "https://github.com/yijehyung/system-fonts"
+documentation = "https://docs.rs/system-fonts"
+keywords = ["font", "locale", "fallback"]
+categories = ["localization"]
+rust-version = "1.85.1"
+
+[dependencies]
+fontdb = "0.23.0"
+sys-locale = "0.3"

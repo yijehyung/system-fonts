@@ -1,6 +1,6 @@
 [package]
 name = "system-fonts"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "System font discovery and locale-based font preset selection."
@@ -12,6 +12,6 @@ keywords = ["font", "locale", "fallback"]
 categories = ["localization"]
 rust-version = "1.85.1"
 
-[dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 fontdb = "0.23.0"
 sys-locale = "0.3"

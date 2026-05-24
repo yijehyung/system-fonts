@@ -1,16 +1,8 @@
 //! System font discovery and locale-based preset selection.
 //!
-//! This crate provides a small API for:
-//! - Detecting the current system locale
-//! - Mapping a locale to a `FontRegion`
-//! - Resolving a prioritized list of installed system fonts using `fontdb`
-//!
-//! The output (`FoundFont`) is designed to be consumed by UI toolkits (e.g. `egui_system_fonts`),
-//! where the caller loads the font bytes and registers them into the UI font system.
-//!
-//! # Quick start
-//!
-//! Resolve fonts from the current system locale:
+//! Detects the current system locale, maps it to a [`FontRegion`], and resolves
+//! a prioritized list of installed fonts. On wasm, font discovery is not supported
+//! and the `find_*` functions return empty results.
 //!
 //! ```no_run
 //! use system_fonts::{find_for_system_locale, FontStyle};
@@ -18,25 +10,15 @@
 //! let (_locale, region, fonts) = find_for_system_locale(FontStyle::Sans);
 //! println!("region={region:?}, fonts={}", fonts.len());
 //! ```
-//!
-//! Force a locale or region policy manually:
-//!
-//! ```no_run
-//! use system_fonts::{find_for_locale, FontStyle};
-//!
-//! let (region, fonts) = find_for_locale("ko-KR", FontStyle::Sans);
-//! println!("region={region:?}, fonts={}", fonts.len());
-//! ```
-//!
-//! # Notes
-//! - Font resolution is best-effort: unknown families are skipped.
-//! - The internal font database is cached (loaded once per process).
-//! - `FoundFont::key` is unique within a single run; do not persist it across runs.
-use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use fontdb::{Database, Family, Query, Source};
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::HashSet;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::OnceLock;
 
 /// Font preference used when selecting system fonts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,24 +76,18 @@ pub enum FoundFontSource {
     Bytes(Arc<[u8]>),
 }
 
-/// Returns the current system locale string (e.g. "ko-KR", "en-US") if available.
-///
-/// # Examples
-///
-/// ```
-/// let loc = system_fonts::system_locale();
-/// // May be None depending on platform/environment.
-/// println!("{loc:?}");
-/// ```
+/// Returns the current system locale string (e.g. `"ko-KR"`, `"en-US"`), or `None` on wasm.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn system_locale() -> Option<String> {
     sys_locale::get_locale()
 }
 
-/// Converts a locale string into a `FontRegion`.
-///
-/// Supports common BCP-47 tags as well as "ko_KR.UTF-8"-style strings.
-///
-/// # Examples
+#[cfg(target_arch = "wasm32")]
+pub fn system_locale() -> Option<String> {
+    None
+}
+
+/// Maps a locale string (BCP-47 or POSIX style) to a [`FontRegion`].
 ///
 /// ```
 /// use system_fonts::{region_from_locale, FontRegion};
@@ -169,11 +145,7 @@ pub fn region_from_locale(locale: &str) -> FontRegion {
     FontRegion::Unknown
 }
 
-/// Returns the default preset priority list for a given region.
-///
-/// The returned presets are ordered from highest to lowest priority.
-///
-/// # Examples
+/// Returns the default preset priority list for a region (highest priority first).
 ///
 /// ```
 /// use system_fonts::{presets_for_region, FontRegion, FontPreset};
@@ -230,25 +202,17 @@ pub fn presets_for_region(region: FontRegion) -> Vec<FontPreset> {
     }
 }
 
-/// Resolves system fonts from presets and style.
+/// Resolves installed system fonts from presets, ordered by priority.
 ///
-/// The returned list is ordered by priority (highest to lowest).
-/// For `FontStyle::Serif`, serif candidates are tried first, then sans candidates are appended
-/// as a fallback.
-///
-/// Notes:
-/// - Duplicate families are removed (first match wins).
-/// - Families not installed on the system are skipped.
-///
-/// # Examples
+/// On wasm, always returns an empty list.
 ///
 /// ```no_run
 /// use system_fonts::{find_from_presets, FontPreset, FontStyle};
 ///
-/// let presets = [FontPreset::Korean, FontPreset::Latin];
-/// let fonts = find_from_presets(presets, FontStyle::Sans);
+/// let fonts = find_from_presets([FontPreset::Korean, FontPreset::Latin], FontStyle::Sans);
 /// println!("fonts={}", fonts.len());
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn find_from_presets<I>(presets_in_priority: I, style: FontStyle) -> Vec<FoundFont>
 where
     I: IntoIterator<Item = FontPreset>,
@@ -284,9 +248,15 @@ where
     out
 }
 
-/// Detects a region from the given locale string, then resolves fonts using that region's presets.
-///
-/// # Examples
+#[cfg(target_arch = "wasm32")]
+pub fn find_from_presets<I>(_presets_in_priority: I, _style: FontStyle) -> Vec<FoundFont>
+where
+    I: IntoIterator<Item = FontPreset>,
+{
+    vec![]
+}
+
+/// Resolves fonts for the given locale string. On wasm, returns an empty font list.
 ///
 /// ```no_run
 /// use system_fonts::{find_for_locale, FontStyle};
@@ -294,17 +264,19 @@ where
 /// let (region, fonts) = find_for_locale("ja-JP", FontStyle::Sans);
 /// println!("region={region:?}, fonts={}", fonts.len());
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn find_for_locale(locale: &str, style: FontStyle) -> (FontRegion, Vec<FoundFont>) {
     let region = region_from_locale(locale);
     let presets = presets_for_region(region);
     (region, find_from_presets(presets, style))
 }
 
-/// Resolves fonts based on the current system locale.
-///
-/// If locale is unavailable, falls back to "en-US".
-///
-/// # Examples
+#[cfg(target_arch = "wasm32")]
+pub fn find_for_locale(locale: &str, _style: FontStyle) -> (FontRegion, Vec<FoundFont>) {
+    (region_from_locale(locale), vec![])
+}
+
+/// Resolves fonts for the current system locale. On wasm, returns an empty font list.
 ///
 /// ```no_run
 /// use system_fonts::{find_for_system_locale, FontStyle};
@@ -312,6 +284,7 @@ pub fn find_for_locale(locale: &str, style: FontStyle) -> (FontRegion, Vec<Found
 /// let (_loc, region, fonts) = find_for_system_locale(FontStyle::Sans);
 /// println!("region={region:?}, fonts={}", fonts.len());
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn find_for_system_locale(style: FontStyle) -> (Option<String>, FontRegion, Vec<FoundFont>) {
     let locale = system_locale();
     let (region, fonts) = match locale.as_deref() {
@@ -324,8 +297,15 @@ pub fn find_for_system_locale(style: FontStyle) -> (Option<String>, FontRegion, 
     (locale, region, fonts)
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn find_for_system_locale(_style: FontStyle) -> (Option<String>, FontRegion, Vec<FoundFont>) {
+    (None, FontRegion::Unknown, vec![])
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 static FONT_DB: OnceLock<Database> = OnceLock::new();
 
+#[cfg(not(target_arch = "wasm32"))]
 fn font_db() -> &'static Database {
     FONT_DB.get_or_init(|| {
         let mut db = Database::new();
@@ -334,6 +314,7 @@ fn font_db() -> &'static Database {
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_one_family(db: &Database, family_name: &str, uniq: usize) -> Option<FoundFont> {
     let families = [Family::Name(family_name)];
     let query = Query {
@@ -362,6 +343,7 @@ fn resolve_one_family(db: &Database, family_name: &str, uniq: usize) -> Option<F
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn preset_targets_sans(p: &FontPreset) -> Vec<String> {
     match p {
         FontPreset::Latin => vec![
@@ -414,6 +396,7 @@ fn preset_targets_sans(p: &FontPreset) -> Vec<String> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn preset_targets_serif(p: &FontPreset) -> Vec<String> {
     match p {
         FontPreset::Latin => vec![

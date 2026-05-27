@@ -76,7 +76,9 @@ pub enum FoundFontSource {
     Bytes(Arc<[u8]>),
 }
 
-/// Returns the current system locale string (e.g. `"ko-KR"`, `"en-US"`), or `None` on wasm.
+/// Returns the current system locale string (e.g. `"ko-KR"`, `"en-US"`).
+///
+/// On WASM, reads `navigator.language` from the browser.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn system_locale() -> Option<String> {
     sys_locale::get_locale()
@@ -84,7 +86,8 @@ pub fn system_locale() -> Option<String> {
 
 #[cfg(target_arch = "wasm32")]
 pub fn system_locale() -> Option<String> {
-    None
+    web_sys::window()
+        .and_then(|w| w.navigator().language())
 }
 
 /// Maps a locale string (BCP-47 or POSIX style) to a [`FontRegion`].

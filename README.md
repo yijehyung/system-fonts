@@ -7,7 +7,7 @@ On wasm, font discovery is not supported and the `find_*` functions return empty
 
 ```toml
 [dependencies]
-system-fonts = "0.1.1"
+system-fonts = "0.1.2"
 ```
 
 ## Usage
